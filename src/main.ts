@@ -74,10 +74,10 @@ function updateTrayIcon(tray: Tray, key: keyof typeof trayIconPaths) {
 
 function getBatteryLevelStatus(device: Device): keyof typeof trayIconPaths {
   if (device.isHeadsetOn) {
-    if (device.batteryLevel > 75) {
+    if (device.batteryLevel >= 50) {
       return "battery-high";
     }
-    if (device.batteryLevel > 15) {
+    if (device.batteryLevel >= 10) {
       return "battery-medium";
     }
     return "battery-low";
