@@ -6,6 +6,7 @@ import {
   trayIconPaths,
   trayMenuTemplate,
 } from "./constants/tray";
+import { FIVE_MINUTES_IN_MS } from "./constants/other";
 
 app.setLoginItemSettings({
   openAtLogin: true,
@@ -110,7 +111,7 @@ app.whenReady().then(async () => {
   batteryLevelUpdateInterval = setInterval(() => {
     device.updateBatteryLevel();
     console.log("Updated battery level ", device.batteryLevel);
-  }, 1000 * 60);
+  }, FIVE_MINUTES_IN_MS);
 });
 
 app.on("before-quit", () => {
