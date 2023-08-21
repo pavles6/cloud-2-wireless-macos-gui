@@ -1,44 +1,111 @@
-import { app, BrowserWindow } from "electron";
+import { app, Menu, MenuItem, Tray } from "electron";
 import * as path from "path";
+import Device from "./device";
+import {
+  labelGetters,
+  trayIconPaths,
+  trayMenuTemplate,
+} from "./constants/tray";
 
-function createWindow() {
-  // Create the browser window.
-  const mainWindow = new BrowserWindow({
-    height: 600,
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-    },
-    width: 800,
-  });
+let tray: Tray | null = null;
 
-  // and load the index.html of the app.
-  mainWindow.loadFile(path.join(__dirname, "../index.html"));
+let device: Device;
 
-  // Open the DevTools.
-  mainWindow.webContents.openDevTools();
+function refreshTrayData(app: Electron.App, tray: Tray) {
+  let updatedItems: MenuItem[];
+
+  let trayTooltip: string;
+
+  const appQuitHandler = () => {
+    app.quit();
+  };
+
+  if (!device.isHeadsetOn) {
+    updatedItems = [
+      {
+        label: labelGetters.get("status")(device),
+        type: "normal",
+        id: "status",
+      },
+      { type: "separator" },
+      {
+        label: "Exit",
+        type: "normal",
+        id: "exit",
+        click: appQuitHandler,
+      },
+    ] as MenuItem[];
+
+    trayTooltip = "HyperX Cloud II Wireless: Not connected";
+  } else {
+    updatedItems = structuredClone(trayMenuTemplate as MenuItem[]).map(
+      (item) => {
+        if (item.id && item.id !== "exit") {
+          item.label = labelGetters.get(item.id)(device);
+        }
+
+        if (item.id === "exit") {
+          item.click = appQuitHandler;
+        }
+
+        return item;
+      }
+    );
+
+    trayTooltip = `HyperX Cloud II Wireless: Connected, ${device.batteryLevel}% battery remaining`;
+  }
+
+  tray.setToolTip(trayTooltip);
+
+  tray.setContextMenu(Menu.buildFromTemplate(updatedItems as MenuItem[]));
+
+  const batteryStatus = getBatteryLevelStatus(device);
+
+  updateTrayIcon(tray, batteryStatus);
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
-  createWindow();
+function updateTrayIcon(tray: Tray, key: keyof typeof trayIconPaths) {
+  tray.setImage(path.join(__dirname, trayIconPaths[key]));
+}
 
-  app.on("activate", function () {
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-});
-
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
+function getBatteryLevelStatus(device: Device): keyof typeof trayIconPaths {
+  if (device.isHeadsetOn) {
+    if (device.batteryLevel > 75) {
+      return "battery-high";
+    }
+    if (device.batteryLevel > 15) {
+      return "battery-medium";
+    }
+    return "battery-low";
   }
+  return "no-device";
+}
+
+let batteryLevelUpdateInterval: NodeJS.Timeout | undefined = undefined;
+
+app.dock.hide();
+app.whenReady().then(async () => {
+  tray = new Tray(
+    path.join(__dirname, "../assets/icons/no-device/waveform.png")
+  );
+
+  device = new Device();
+
+  await device.pair();
+
+  device.on("refresh-gui", () => {
+    refreshTrayData(app, tray);
+  });
+
+  refreshTrayData(app, tray);
+
+  batteryLevelUpdateInterval = setInterval(() => {
+    device.updateBatteryLevel();
+    console.log("Updated battery level ", device.batteryLevel);
+  }, 1000 * 60);
 });
 
-// In this file you can include the rest of your app"s specific main process
-// code. You can also put them in separate files and require them here.
+app.on("before-quit", () => {
+  device.close();
+  if (batteryLevelUpdateInterval) clearInterval(batteryLevelUpdateInterval);
+});
