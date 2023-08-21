@@ -53,5 +53,6 @@ export const trayMenuTemplate = [
     type: "normal",
     id: "exit",
     click: null,
+    accelerator: "CommandOrControl+Q",
   },
 ] as unknown[];

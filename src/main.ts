@@ -38,6 +38,7 @@ function refreshTrayData(app: Electron.App, tray: Tray) {
         type: "normal",
         id: "exit",
         click: appQuitHandler,
+        accelerator: "CommandOrControl+Q",
       },
     ] as MenuItem[];
 
