@@ -1,7 +1,6 @@
 import * as hid from "node-hid";
 import { UnknownResponse } from "./hid-errors/UnknownResponse";
 import { NoResponse } from "./hid-errors/NoResponse";
-import { HeadsetOff } from "./hid-errors/HeadsetOff";
 import { HIDError } from "./hid-errors/HIDError";
 import { EventEmitter } from "events";
 
@@ -63,7 +62,11 @@ export default class Device extends EventEmitter {
         (device) => device.productId === PID && device.vendorId === VID
       )[0];
 
-    this.device = new hid.HID(deviceInfo.path);
+    try {
+      this.device = new hid.HID(deviceInfo.path);
+    } catch (error) {
+      this.isHeadsetOn = false;
+    }
 
     try {
       this.batteryLevel = await this.getBatteryLevel(); // get battery level on startup
@@ -90,6 +93,8 @@ export default class Device extends EventEmitter {
   }
 
   async updateBatteryLevel() {
+    if (!this.isHeadsetOn) return;
+
     try {
       this.batteryLevel = await this.getBatteryLevel();
     } catch (error) {
@@ -108,6 +113,7 @@ export default class Device extends EventEmitter {
   }
 
   async getBatteryLevel(): Promise<number> {
+    if (!this.isHeadsetOn) return 0;
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     for (const _ in new Array(10).fill(null)) {
       this.device.write(BATTERY_LEVEL_PACKET);
@@ -121,12 +127,7 @@ export default class Device extends EventEmitter {
           return buffer[BATTERY_LEVEL_INDEX];
         }
       } catch (error) {
-        if (error.type == "noResponse") {
-          this.isHeadsetOn = false;
-          throw new HeadsetOff();
-        } else {
-          continue;
-        }
+        continue;
       }
 
       await this.delay(1000);

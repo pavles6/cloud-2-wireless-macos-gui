@@ -7,6 +7,10 @@ import {
   trayMenuTemplate,
 } from "./constants/tray";
 
+app.setLoginItemSettings({
+  openAtLogin: true,
+});
+
 let tray: Tray | null = null;
 
 let device: Device;
@@ -91,7 +95,11 @@ app.whenReady().then(async () => {
 
   device = new Device();
 
-  await device.pair();
+  try {
+    await device.pair();
+  } catch (error) {
+    device.isHeadsetOn = false;
+  }
 
   device.on("refresh-gui", () => {
     refreshTrayData(app, tray);
@@ -106,6 +114,6 @@ app.whenReady().then(async () => {
 });
 
 app.on("before-quit", () => {
-  device.close();
+  if (device) device.close();
   if (batteryLevelUpdateInterval) clearInterval(batteryLevelUpdateInterval);
 });
