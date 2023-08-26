@@ -1,95 +1,81 @@
 import { app, Menu, MenuItem, Tray } from "electron";
 import * as path from "path";
 import Device from "./device";
-import {
-  labelGetters,
-  trayIconPaths,
-  trayMenuTemplate,
-} from "./constants/tray";
+import { trayIconPaths, trayMenuTemplate } from "./constants/tray";
 import { FIVE_MINUTES_IN_MS } from "./constants/other";
+import { getBatteryLevelStatus } from "./utils/getBatteryStatusByLevel";
+import { getBatteryLabel } from "./utils/getBatteryLabel";
+import { getStatusLabel } from "./utils/getBatteryStatusLabel";
+import { getTrayTooltip } from "./utils/getTrayTooltip";
 
 app.setLoginItemSettings({
   openAtLogin: true,
 });
 
+app.dock.hide();
+
 let tray: Tray | null = null;
 
 let device: Device;
 
-function refreshTrayData(app: Electron.App, tray: Tray) {
-  let updatedItems: MenuItem[];
+let batteryLevelUpdateInterval: NodeJS.Timeout | undefined = undefined;
 
-  let trayTooltip: string;
+let lastCheckedDate: Date | undefined = undefined;
+
+function refreshTrayData(app: Electron.App, tray: Tray) {
+  let trayItems: MenuItem[] = structuredClone(trayMenuTemplate) as MenuItem[];
 
   const appQuitHandler = () => {
     app.quit();
   };
 
-  if (!device.isHeadsetOn) {
-    updatedItems = [
-      {
-        label: labelGetters.get("status")(device),
-        type: "normal",
-        id: "status",
-      },
-      { type: "separator" },
-      {
-        label: "Exit",
-        type: "normal",
-        id: "exit",
-        click: appQuitHandler,
-        accelerator: "CommandOrControl+Q",
-      },
-    ] as MenuItem[];
+  const restartAppHandler = () => {
+    app.relaunch();
+    app.quit();
+  };
 
-    trayTooltip = "HyperX Cloud II Wireless: Not connected";
-  } else {
-    updatedItems = structuredClone(trayMenuTemplate as MenuItem[]).map(
-      (item) => {
-        if (item.id && item.id !== "exit") {
-          item.label = labelGetters.get(item.id)(device);
-        }
-
-        if (item.id === "exit") {
-          item.click = appQuitHandler;
-        }
-
-        return item;
-      }
+  if (device.batteryLevel == -1) {
+    trayItems = trayItems.filter(
+      (item: MenuItem) => item.id !== "battery" && item.id !== "battery_update"
     );
-
-    trayTooltip = `HyperX Cloud II Wireless: Connected, ${device.batteryLevel}% battery remaining`;
   }
 
-  tray.setToolTip(trayTooltip);
+  trayItems.find((item: MenuItem) => item.id == "status").label =
+    getStatusLabel(lastCheckedDate, device);
 
-  tray.setContextMenu(Menu.buildFromTemplate(updatedItems as MenuItem[]));
+  const batteryTrayItem = trayItems.find(
+    (item: MenuItem) => item.id == "battery"
+  );
 
-  const batteryStatus = getBatteryLevelStatus(device);
+  if (batteryTrayItem) batteryTrayItem.label = getBatteryLabel(device);
 
-  updateTrayIcon(tray, batteryStatus);
+  const batteryUpdateTrayItem = trayItems.find(
+    (item: MenuItem) => item.id == "battery_update"
+  );
+
+  if (batteryUpdateTrayItem)
+    batteryUpdateTrayItem.click = () => updateTrayBatteryPercentage(device);
+
+  trayItems.find((item: MenuItem) => item.id == "exit").click = appQuitHandler;
+
+  trayItems.find((item: MenuItem) => item.id == "restart").click =
+    restartAppHandler;
+
+  tray.setToolTip(getTrayTooltip(device.isHeadsetOn, device.batteryLevel));
+
+  tray.setContextMenu(Menu.buildFromTemplate(trayItems as MenuItem[]));
 }
 
 function updateTrayIcon(tray: Tray, key: keyof typeof trayIconPaths) {
   tray.setImage(path.join(__dirname, trayIconPaths[key]));
 }
 
-function getBatteryLevelStatus(device: Device): keyof typeof trayIconPaths {
-  if (device.isHeadsetOn) {
-    if (device.batteryLevel >= 50) {
-      return "battery-high";
-    }
-    if (device.batteryLevel >= 10) {
-      return "battery-medium";
-    }
-    return "battery-low";
-  }
-  return "no-device";
+async function updateTrayBatteryPercentage(device: Device) {
+  await device.getBatteryLevel();
+  lastCheckedDate = new Date();
+  updateTrayIcon(tray, getBatteryLevelStatus(device.batteryLevel));
 }
 
-let batteryLevelUpdateInterval: NodeJS.Timeout | undefined = undefined;
-
-app.dock.hide();
 app.whenReady().then(async () => {
   tray = new Tray(
     path.join(__dirname, "../assets/icons/no-device/waveform.png")
@@ -97,25 +83,19 @@ app.whenReady().then(async () => {
 
   device = new Device();
 
-  try {
-    await device.pair();
-  } catch (error) {
-    device.isHeadsetOn = false;
-  }
-
-  device.on("refresh-gui", () => {
-    refreshTrayData(app, tray);
-  });
+  await updateTrayBatteryPercentage(device);
 
   refreshTrayData(app, tray);
 
-  batteryLevelUpdateInterval = setInterval(() => {
-    device.updateBatteryLevel();
-    console.log("Updated battery level ", device.batteryLevel);
+  tray.on("click", () => {
+    refreshTrayData(app, tray);
+  });
+
+  batteryLevelUpdateInterval = setInterval(async () => {
+    await updateTrayBatteryPercentage(device);
   }, FIVE_MINUTES_IN_MS);
 });
 
 app.on("before-quit", () => {
-  if (device) device.close();
   if (batteryLevelUpdateInterval) clearInterval(batteryLevelUpdateInterval);
 });

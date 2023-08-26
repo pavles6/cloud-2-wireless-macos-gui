@@ -1,33 +1,11 @@
-import Device from "../device";
-
-export const labelGetters = new Map();
-labelGetters.set(
-  "status",
-  (device: Device) =>
-    `HyperX Cloud II Wireless: ${
-      device.isHeadsetOn ? "Connected" : "Not connected"
-    }`
-);
-labelGetters.set(
-  "is_mic_connected",
-  (device: Device) =>
-    `Microphone: ${
-      device.isMicConnected === undefined && device.isMuted === undefined
-        ? "N/A"
-        : `${device.isMuted ? "Muted" : "On"}`
-    }`
-);
-labelGetters.set(
-  "battery",
-  (device: Device) =>
-    `Battery: ${device.batteryLevel}%${device.isCharging ? ", Charging" : ""}`
-);
-
 export const trayIconPaths = {
   "no-device": "../assets/icons/no-device/waveform.png",
+  "battery-very-high": "../assets/icons/battery-very-high/waveform.png",
   "battery-high": "../assets/icons/battery-high/waveform.png",
   "battery-medium": "../assets/icons/battery-medium/waveform.png",
+  "battery-medium-low": "../assets/icons/battery-medium-low/waveform.png",
   "battery-low": "../assets/icons/battery-low/waveform.png",
+  "battery-very-low": "../assets/icons/battery-very-low/waveform.png",
 };
 
 export const trayMenuTemplate = [
@@ -42,14 +20,23 @@ export const trayMenuTemplate = [
     type: "normal",
     id: "battery",
   },
-  {
-    label: "",
-    type: "normal",
-    id: "is_mic_connected",
-  },
   { type: "separator" },
   {
-    label: "Exit",
+    label: "Update battery level",
+    type: "normal",
+    id: "battery_update",
+    click: null,
+  },
+  {
+    label: "Restart",
+    type: "normal",
+    id: "restart",
+    click: null,
+    accelerator: "CommandOrControl+R",
+  },
+
+  {
+    label: "Quit",
     type: "normal",
     id: "exit",
     click: null,
